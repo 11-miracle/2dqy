@@ -4,18 +4,13 @@ import re
 from typing import List, Dict, Optional
 
 from langchain_community.tools import TavilySearchResults
+from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
-from langchain.tools import BaseTool
 
-
-class Tool(BaseModel, arbitrary_types_allowed=True):
-    name: str
-    description: str
-    func: callable
 
 
 class AgentState(BaseModel):
@@ -38,11 +33,17 @@ def calculator_tool(a: int, b: int):
     return a * b
 
 
+# Define a wrapper function for TavilySearchResults
+def search_tool_wrapper(params: dict):
+    query = params.get('query', '')
+    return search_tool.ainvoke({'query': query})
+
+
 tools = [
     Tool(
         name="search_tool",
         description="用于执行上网搜索",
-        func=search_tool
+        func=search_tool_wrapper
     ),
     Tool(
         name="calculator_tool",
@@ -64,21 +65,22 @@ async def chatbot(state: AgentState) -> AgentState:
     1. 是否需要使用工具
     2. 如果需要，选择哪个工具
     3. 使用什么参数调用工具
+    不需要打印出思考过程，我只需要最终结果
     对思考的结果以json格式进行返回，请严格按照此提示执行，每段不需要空行    
     举一些正确的例子：
     {{"thought": "用户似乎在询问我是谁，可能是在确认身份或者想要了解关于我的信息。由于这是一个对话的开始，我需要给出一个合适的自我介绍，并且可能需要进一步了解用户的需求或兴趣。同时，用户提到了他叫Lanny，我可能需要记住这一点，以便在未来的对话中使用。另外，提供了两个工具：search_tool和calculator_tool。目前看来，这些工具可能不直接适用于当前的对话情境，因为用户似乎是在进行社交性的问候而不是寻求特定的信息或计算。然而，如果用户后续提出相关需求，我可以考虑使用这些工具来辅助回答。", "need_tool": "False", "tool": "", "tool_input": ""}}
-    {{"thought": "首先，我需要理解用户的问题。用户想要知道广州今天的天气情况，这应该是要获取天气信息。我来想想，要得到天气信息，通常有几种方式。一是直接知道，但作为一个AI，我并不具备实时获取天气数据的能力，所以需要通过其他方式来获得这个信息。二是使用搜索引擎搜索天气信息，三是可能有专门的天气API，但在这个场景中，只有search_tool和calculator_tool两个工具可用。calculator_tool是用于执行两个数相乘的，这和获取天气信息没有直接关系，所以可以排除。那只剩下search_tool，也就是用于执行上网搜索。那么，我需要考虑如何利用search_tool来获取广州今天的天气信息。可能的思路是，通过search_tool搜索“广州今天天气”相关的关键词，然后从搜索结果中提取出天气信息。", "need_tool": "False", "tool": "", "tool_input": ""}}
+    {{"thought": "首先，我需要理解用户的问题。用户想要知道广州今天的天气情况，这应该是要获取天气信息。我来想想，要得到天气信息，通常有几种方式。一是直接知道，但作为一个AI，我并不具备实时获取天气数据的能力，所以需要通过其他方式来获得这个信息。二是使用搜索引擎搜索天气信息，三是可能有专门的天气API，但在这个场景中，只有search_tool和calculator_tool两个工具可用。calculator_tool是用于执行两个数相乘的，这和获取天气信息没有直接关系，所以可以排除。那只剩下search_tool，也就是用于执行上网搜索。那么，我需要考虑如何利用search_tool来获取广州今天的天气信息。可能的思路是，通过search_tool搜索"广州今天天气"相关的关键词，然后从搜索结果中提取出天气信息。", "need_tool": "False", "tool": "", "tool_input": ""}}
     {{"thought": "我需要给出一个合适的自我介绍，并且可能需要进一步了解用户的需求或兴趣。同时，用户提到了他叫Lanny，我可能需要记住这一点，以便在未来的对话中使用。另外，提供了两个工具：search_tool和calculator_tool。目前看来，这些工具可能不直接适用于当前的对话情境，因为用户似乎是在进行社交性的问候而不是寻求特定的信息或计算。然而，如果用户后续提出相关需求，我可以考虑使用这些工具来辅助回答。", "need_tool": "Ture", "tool": "calculator_tool", "tool_input": ""}}
-    {{"thought":"用户在询问广州今天的天气，这显然是一个天气查询的问题。作为一个AI助手，我需要提供准确的天气信息来满足用户的需求。首先，我需要确认用户所在的位置是否是广州，因为天气是与地理位置密切相关的。不过，用户明确指出了是广州的天气，所以这一点可以确定。接下来，我需要找到获取广州当前天气信息的方法。由于我是一个AI模型，没有直接访问实时数据的能力，所以需要借助外部工具或API来获取这些信息。在这个场景中，我有两个可用的工具：search_tool和calculator_tool。很明显，calculator_tool是用于数学计算的，与天气查询无关，所以可以排除。因此，我需要使用search_tool来进行网络搜索，以获取广州今天的天气信息。为了有效地使用search_tool，我需要构造一个合适的搜索查询，以便得到准确和有用的结果。可能的搜索查询可以是“广州今天天气”或者“广州实时天气”等。此外，我还需要考虑如何从搜索结果中提取出用户需要的天气信息，比如温度、降雨概率、风速等。这可能需要对搜索结果进行解析和筛选，以提供给用户一个清晰的答案。总之，我的计划是使用search_tool进行网络搜索，获取广州今天的天气信息，并将相关信息整理后回复给用户。","need_tool":"True","tool":"search_tool","tool_input":"广州今天天气"}}
+    {{"thought":"用户在询问广州今天的天气，这显然是一个天气查询的问题。作为一个AI助手，我需要提供准确的天气信息来满足用户的需求。首先，我需要确认用户所在的位置是否是广州，因为天气是与地理位置密切相关的。不过，用户明确指出了是广州的天气，所以这一点可以确定。接下来，我需要找到获取广州当前天气信息的方法。由于我是一个AI模型，没有直接访问实时数据的能力，所以需要借助外部工具或API来获取这些信息。在这个场景中，我有两个可用的工具：search_tool和calculator_tool。很明显，calculator_tool是用于数学计算的，与天气查询无关，所以可以排除。因此，我需要使用search_tool来进行网络搜索，以获取广州今天的天气信息。为了有效地使用search_tool，我需要构造一个合适的搜索查询，以便得到准确和有用的结果。可能的搜索查询可以是"广州今天天气"或者"广州实时天气"等。此外，我还需要考虑如何从搜索结果中提取出用户需要的天气信息，比如温度、降雨概率、风速等。这可能需要对搜索结果进行解析和筛选，以提供给用户一个清晰的答案。总之，我的计划是使用search_tool进行网络搜索，获取广州今天的天气信息，并将相关信息整理后回复给用户。","need_tool":"True","tool":"search_tool","tool_input":"广州今天天气"}}
     错误例子：
     基于用户输入和当前对话历史，思考下一步行动。用户输入:你知道我是谁？可用工具:['search_tool:用于执行上网搜索','calculator_tool:用于执行两个数相乘']请决定:1.是否需要使用工具2.如果需要，选择哪个工具3.使用什么参数调用工具对思考的结果以json格式进行返回，请严格按照此提示执行，每段不需要空行举一些例子：{{"thought":"用户似乎在询问我是谁，可能是在确认身份或者想要了解关于我的信息。由于这是一个对话的开始，我需要给出一个合适的自我介绍，并且可能需要进一步了解用户的需求或兴趣。同时，用户提到了他叫Lanny，我可能需要记住这一点，以便在未来的对话中使用。另外，提供了两个工具：search_tool和calculator_tool。目前看来，这些工具可能不直接适用于当前的对话情境，因为用户似乎是在进行社交性的问候而不是寻求特定的信息或计算。然而，如果用户后续提出相关需求，我可以考虑使用这些工具来辅助回答。","need_tool":"False","tool":"","tool_input":""}}
-    {{"thought":"首先，我需要理解用户的问题。用户想要知道广州今天的天气情况，这应该是要获取天气信息。我来想想，要得到天气信息，通常有几种方式。一是直接知道，但作为一个AI，我并不具备实时获取天气数据的能力，所以需要通过其他方式来获得这个信息。二是使用搜索引擎搜索天气信息，三是可能有专门的天气API，但在这个场景中，只有search_tool和calculator_tool两个工具可用。calculator_tool是用于执行两个数相乘的，这和获取天气信息没有直接关系，所以可以排除。那只剩下search_tool，也就是用于执行上网搜索。那么，我需要考虑如何利用search_tool来获取广州今天的天气信息。可能的思路是，通过search_tool搜索“广州今天天气”相关的关键词，然后从搜索结果中提取出天气信息。","need_tool":"False","tool":"","tool_input":""}}
+    {{"thought":"首先，我需要理解用户的问题。用户想要知道广州今天的天气情况，这应该是要获取天气信息。我来想想，要得到天气信息，通常有几种方式。一是直接知道，但作为一个AI，我并不具备实时获取天气数据的能力，所以需要通过其他方式来获得这个信息。二是使用搜索引擎搜索天气信息，三是可能有专门的天气API，但在这个场景中，只有search_tool和calculator_tool两个工具可用。calculator_tool是用于执行两个数相乘的，这和获取天气信息没有直接关系，所以可以排除。那只剩下search_tool，也就是用于执行上网搜索。那么，我需要考虑如何利用search_tool来获取广州今天的天气信息。可能的思路是，通过search_tool搜索"广州今天天气"相关的关键词，然后从搜索结果中提取出天气信息。","need_tool":"False","tool":"","tool_input":""}}
     {{"thought":"我需要给出一个合适的自我介绍，并且可能需要进一步了解用户的需求或兴趣。同时，用户提到了他叫Lanny，我可能需要记住这一点，以便在未来的对话中使用。另外，提供了两个工具：search_tool和calculator_tool。目前看来，这些工具可能不直接适用于当前的对话情境，因为用户似乎是在进行社交性的问候而不是寻求特定的信息或计算。然而，如果用户后续提出相关需求，我可以考虑使用这些工具来辅助回答。","need_tool":"Ture","tool":"calculator_tool","tool_input":""}}
-    {{"thought":"用户在询问广州今天的天气，这显然是一个天气查询的问题。作为一个AI助手，我需要提供准确的天气信息来满足用户的需求。首先，我需要确认用户所在的位置是否是广州，因为天气是与地理位置密切相关的。不过，用户明确指出了是广州的天气，所以这一点可以确定。接下来，我需要找到获取广州当前天气信息的方法。由于我是一个AI模型，没有直接访问实时数据的能力，所以需要借助外部工具或API来获取这些信息。在这个场景中，我有两个可用的工具：search_tool和calculator_tool。很明显，calculator_tool是用于数学计算的，与天气查询无关，所以可以排除。因此，我需要使用search_tool来进行网络搜索，以获取广州今天的天气信息。为了有效地使用search_tool，我需要构造一个合适的搜索查询，以便得到准确和有用的结果。可能的搜索查询可以是“广州今天天气”或者“广州实时天气”等。此外，我还需要考虑如何从搜索结果中提取出用户需要的天气信息，比如温度、降雨概率、风速等。这可能需要对搜索结果进行解析和筛选，以提供给用户一个清晰的答案。总之，我的计划是使用search_tool进行网络搜索，获取广州今天的天气信息，并将相关信息整理后回复给用户。","need_tool":"True","tool":"search_tool","tool_input":"广州今天天气"}}
-    
+    {{"thought":"用户在询问广州今天的天气，这显然是一个天气查询的问题。作为一个AI助手，我需要提供准确的天气信息来满足用户的需求。首先，我需要确认用户所在的位置是否是广州，因为天气是与地理位置密切相关的。不过，用户明确指出了是广州的天气，所以这一点可以确定。接下来，我需要找到获取广州当前天气信息的方法。由于我是一个AI模型，没有直接访问实时数据的能力，所以需要借助外部工具或API来获取这些信息。在这个场景中，我有两个可用的工具：search_tool和calculator_tool。很明显，calculator_tool是用于数学计算的，与天气查询无关，所以可以排除。因此，我需要使用search_tool来进行网络搜索，以获取广州今天的天气信息。为了有效地使用search_tool，我需要构造一个合适的搜索查询，以便得到准确和有用的结果。可能的搜索查询可以是"广州今天天气"或者"广州实时天气"等。此外，我还需要考虑如何从搜索结果中提取出用户需要的天气信息，比如温度、降雨概率、风速等。这可能需要对搜索结果进行解析和筛选，以提供给用户一个清晰的答案。总之，我的计划是使用search_tool进行网络搜索，获取广州今天的天气信息，并将相关信息整理后回复给用户。","need_tool":"True","tool":"search_tool","tool_input":"广州今天天气"}}
+
     严格按照例子的格式
     以JSON格式返回,只需要返回如下格式内容: {{"thought": "思考过程", "need_tool": "True/False", "tool": "工具名", "tool_input": "参数"}}
-    
+
     """
 
     # 定义llm
@@ -105,7 +107,12 @@ async def chatbot(state: AgentState) -> AgentState:
     response = await llm_with_tool.ainvoke(prompt)
 
     res = response.content.replace('\n', '').replace(' ', '').strip()
-    # print("bot: ", res, type(response.content), '\n------')
+    json_pattern = r'\{.*?\}'
+
+    # 使用 re.findall 找到所有匹配的 JSON 字符串
+    res = re.search(json_pattern, res, re.DOTALL).group(0)
+
+    print("bot: ", res, type(response.content), '\n------')
     # print('dict: ',eval(res))
     try:
         result = json.loads(res)
@@ -136,47 +143,57 @@ async def chatbot(state: AgentState) -> AgentState:
 
 
 async def execute_tool(state: AgentState) -> AgentState:
-    """执行工具调用"""
-    tool = next((t for t in tools if t.name == state.selected_tool), None)
-    if not tool:
-        return AgentState(
-            messages=state.messages,
-            current_input=state.current_input,
-            thought=state.thought,
-            selected_tool=state.selected_tool,
-            tool_input=state.tool_input,
-            tool_output=state.tool_output,
-            final_answer=state.final_answer,
-            status="ERROR",
-        )
+    """Execute the selected tool with the given input."""
+    # tool 是什么？
+    print(f"Tool Selected: {state.selected_tool}")
+    print(f"Tool Input: {state.tool_input}")
+
+    tool_to_use = None
+    for tool in tools:
+        if tool.name == state.selected_tool:
+            tool_to_use = tool
+            break
+
+    if tool_to_use is None:
+        state.tool_output = "Tool not found"
+        state.status = "ERROR"
+        return state
 
     try:
-        print(tool, tool.name)
-        result = await tool.func.ainvoke(state.tool_input)
-        # print(result)
-        return AgentState(
-            messages=state.messages,
-            current_input=state.current_input,
-            thought=state.thought,
-            selected_tool=state.selected_tool,
-            tool_input=state.tool_input,
-            # tool_output=state.tool_output,
-            final_answer=state.final_answer,
-            tool_output=str(result),
-            status="GENERATE_RESPONSE"
-        )
+        print(tool_to_use, tool_to_use.name)
+        
+        # Check if the tool function has an ainvoke method
+        if hasattr(tool_to_use.func, 'ainvoke'):
+            result = await tool_to_use.func.ainvoke(state.tool_input)
+        elif callable(tool_to_use.func):
+            # If it's a regular async function, call it directly
+            # Parse the tool input if it's a JSON string
+            try:
+                if state.tool_input and isinstance(state.tool_input, str):
+                    # Try to parse as JSON
+                    params = json.loads(state.tool_input)
+                    if isinstance(params, dict):
+                        result = await tool_to_use.func(**params)
+                    else:
+                        result = await tool_to_use.func(params)
+                else:
+                    # If not a string or empty, just call the function
+                    result = await tool_to_use.func()
+            except json.JSONDecodeError:
+                # If not valid JSON, pass it as is
+                result = await tool_to_use.func(state.tool_input)
+        else:
+            result = "Tool function is not callable"
+            
+        state.tool_output = str(result)
+        state.status = "TOOL_EXECUTED"
+        print(f"Tool Output: {state.tool_output}")
     except Exception as e:
-        return AgentState(
-            messages=state.messages,
-            current_input=state.current_input,
-            # thought=state.thought,
-            selected_tool=state.selected_tool,
-            tool_input=state.tool_input,
-            tool_output=state.tool_output,
-            final_answer=state.final_answer,
-            status="ERROR",
-            thought=f"Tool execution failed: {str(e)}"
-        )
+        state.tool_output = f"Error executing tool: {str(e)}"
+        state.status = "ERROR"
+        print(f"Tool Error: {state.tool_output}")
+
+    return state
 
 
 async def generate_response(state: AgentState) -> AgentState:
@@ -303,7 +320,7 @@ async def run_agent(state: AgentState):
     # 手动将消息添加到上下文
     state.messages.append({"role": "user", "content": final_state['current_input']})
     state.messages.append({"role": "ai", "content": final_state['final_answer']})
-    print('\n消息列表：', state.messages,'\n')
+    print('\n消息列表：', state.messages, '\n')
     state.messages = state.messages[-5:]  # 保存最近5条消息的上下文   如果后续需要持久化保存消息的话，则每生成一次，将数据添加到数据库中
     state = AgentState(
         messages=state.messages,
@@ -326,7 +343,6 @@ async def main():
         "谁发明了相对论？",
         "计算圆周率乘以10等于多少？",
         "计算230乘以458等于多少？",
-
 
     ]
     questions = [
