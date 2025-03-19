@@ -106,9 +106,10 @@ async def upload(
         #     "status": "success",
         #     "result": final_response
         # })
-        logging.info(chunks)
+
+        # 进行向量化
         embedding_text = embedding(chunks)
-        logging.info(embedding_text)
+        #
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
