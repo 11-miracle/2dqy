@@ -1,7 +1,11 @@
 import logging
 import asyncio
 from datetime import datetime
-from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
+
+from DrissionPage._configs.chromium_options import ChromiumOptions
+from DrissionPage._pages.chromium_page import ChromiumPage
+from langchain_community.document_loaders import PyMuPDFLoader, TextLoader, UnstructuredWordDocumentLoader, \
+    UnstructuredExcelLoader, UnstructuredPowerPointLoader
 
 from fastapi import FastAPI, UploadFile, File
 import json
@@ -14,7 +18,7 @@ from langchain_community.tools import TavilySearchResults
 from langchain_chroma import Chroma
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
-from langchain_text_splitters import CharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
@@ -384,12 +388,12 @@ logging.basicConfig(
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World, I'm a chatbot"}
+    return {"message": "Hello World, I'm a chatbot🤖"}
 
 
 @app.get("/test")
 async def root(question: str):
-    return {"message": f"{question}\n hello,I don't know"}
+    return {"message": f"{question}\n hello,I don't know✈️🚄"}
 
 
 @app.get("/test/{name}")
@@ -409,7 +413,7 @@ async def say_hello(query: str = None):
 """
 用于上传本地文件
 """
-@app.post("/chatbot/upload/pdf")
+@app.post("/chatbot/upload/file")
 async def upload_file(file: UploadFile = File(...)):
     logging.info(f"Received file: {file}")
 
@@ -427,119 +431,107 @@ async def upload_file(file: UploadFile = File(...)):
     with open(f'./files/{filename}', "wb") as f:
         f.write(content)
     logging.info(f"file saved: {filename}")
+    file_path = f'./files/{filename}'
+    # 4、判断文件，并加载
+    if filetype == 'pdf':
+        data = PyMuPDFLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
 
-    # 4、加载文件
-    data = PyMuPDFLoader(f'./files/{filename}').load()  # 每页返回一个document文档  是个列表，需要遍历获取
+    elif filetype == 'txt':
+        data = TextLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
 
-
-
-
-
+    elif filetype in ['doc','docx']:
+        data = UnstructuredWordDocumentLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
+    elif filetype in ['xls','xlsx']:
+        data = UnstructuredExcelLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
+    elif filetype in ['ppt','pptx']:
+        data = UnstructuredPowerPointLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
+    else:
+        try:
+            data = TextLoader(file_path).load()  # 每页返回一个document文档  是个列表，需要遍历获取
+        except Exception as e:
+            return {"message": f"File {filename} uploaded failed",
+                    "filename": filename,
+                    # "content":content,
+                    }
     # 5、创建一个文本分割器，chunks代表分成多少块  chunk_overlap 确保相邻片段之间有一定的重叠部分
     text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
-
     # 6、使用文本分割器，将原始文档分割成多个片段   documents是一个列表
     documents = text_splitter.split_documents(data)
     logging.info(f"documents: {documents}")
-
-    # 7、初始化嵌入模型
-    embeddings = OllamaEmbeddings(model="llama3")
-    # 8、初始化向量数据库
-    persist_directory = './vector/chroma1'  # 持久化数据  存放处
-    vector_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings, collection_name="test1")
-    # 9、将文件添加到向量数据库中
-    vector_db.add_documents(documents)
-
+    # # 7、初始化嵌入模型
+    # embeddings = OllamaEmbeddings(model="llama2")
+    # # 8、初始化向量数据库
+    # persist_directory = './vector/chroma1'  # 持久化数据  存放处
+    # vector_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings, collection_name="test1")
+    # # 9、将文件添加到向量数据库中
+    # vector_db.add_documents(documents)
     # 返回结果
     return {"message": f"File {filename} uploaded successfully",
             "filename": filename,
             # "content":content,
             }
+
+
 
 
 @app.post("/chatbot/upload/text")
-async def upload_file(file: UploadFile = File(...)):
-    logging.info(f"Received file: {file}")
+async def upload_text(text: str):
+    logging.info(f"Received file: {text}")
 
-    # 1、获取文件名
-    filename = file.filename
-    logging.info(f"filename: {filename}")
 
-    # 2、获取文件类型
-    filetype = filename.split('.')[-1]
-    logging.info(f"filetype: {filetype}")
-
-    # 3、获取文件内容
-    content = await file.read()
-    # 保存文件
-    with open(f'./files/{filename}', "wb") as f:
-        f.write(content)
-    logging.info(f"file saved: {filename}")
-
-    # 4、加载文件
-    data = TextLoader(f'./files/{filename}').load()  # 每页返回一个document文档  是个列表，需要遍历获取
 
     # 5、创建一个文本分割器，chunks代表分成多少块  chunk_overlap 确保相邻片段之间有一定的重叠部分
     text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
 
     # 6、使用文本分割器，将原始文档分割成多个片段   documents是一个列表
-    documents = text_splitter.split_documents(data)
+    documents = text_splitter.split_text(text)
     logging.info(f"documents: {documents}")
 
     # 7、初始化嵌入模型
-    embeddings = OllamaEmbeddings(model="llama3")
+    embeddings = OllamaEmbeddings(model="llama2")
     # 8、初始化向量数据库
     persist_directory = './vector/chroma1'  # 持久化数据  存放处
     vector_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings, collection_name="test1")
     # 9、将文件添加到向量数据库中
-    vector_db.add_documents(documents)
+    vector_db.add_texts(documents)
 
     # 返回结果
-    return {"message": f"File {filename} uploaded successfully",
-            "filename": filename,
+    return {"message": f" text uploaded successfully",
             # "content":content,
             }
 
 
-@app.post("/chatbot/upload/html")
-async def upload_file(file: UploadFile = File(...)):
-    logging.info(f"Received file: {file}")
+@app.post("/chatbot/upload/website")
+async def upload_file(url:str):
+    logging.info(f"Received url: {url}")
 
-    # 1、获取文件名
-    filename = file.filename
-    logging.info(f"filename: {filename}")
+    co = ChromiumOptions()
+    co.incognito()  # 匿名模式
+    co.headless()  # 无头模式
+    co.set_argument('--no-sandbox')  # 无沙盒模式
+    tab = ChromiumPage(co)
+    tab.get(url)
+    res = tab.html
 
-    # 2、获取文件类型
-    filetype = filename.split('.')[-1]
-    logging.info(f"filetype: {filetype}")
 
-    # 3、获取文件内容
-    content = await file.read()
-    # 保存文件
-    with open(f'./files/{filename}', "wb") as f:
-        f.write(content)
-    logging.info(f"file saved: {filename}")
 
-    # 4、加载文件
-    data = TextLoader(f'./files/{filename}').load()  # 每页返回一个document文档  是个列表，需要遍历获取
 
-    # 5、创建一个文本分割器，chunks代表分成多少块  chunk_overlap 确保相邻片段之间有一定的重叠部分
+    # 创建一个文本分割器，chunks代表分成多少块  chunk_overlap 确保相邻片段之间有一定的重叠部分
     text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
 
     # 6、使用文本分割器，将原始文档分割成多个片段   documents是一个列表
-    documents = text_splitter.split_documents(data)
+    documents = text_splitter.split_text(res)
     logging.info(f"documents: {documents}")
 
     # 7、初始化嵌入模型
-    embeddings = OllamaEmbeddings(model="llama3")
+    embeddings = OllamaEmbeddings(model="llama2")
     # 8、初始化向量数据库
     persist_directory = './vector/chroma1'  # 持久化数据  存放处
     vector_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings, collection_name="test1")
     # 9、将文件添加到向量数据库中
-    vector_db.add_documents(documents)
+    vector_db.add_texts(documents)
 
     # 返回结果
-    return {"message": f"File {filename} uploaded successfully",
-            "filename": filename,
+    return {"message": f"URL uploaded successfully",
             # "content":content,
             }
