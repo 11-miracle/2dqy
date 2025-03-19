@@ -1,10 +1,13 @@
 import json
 import logging
 import os
+import uuid
 from datetime import datetime
-
+import chromadb
 import requests
 from PyPDF2 import PdfReader
+from chromadb.api.types import IncludeEnum
+from chromadb.utils.embedding_functions.openai_embedding_function import OpenAIEmbeddingFunction
 from docx import Document
 from openai import OpenAI
 
@@ -133,3 +136,54 @@ def embedding(text):
         return response.json()["data"][0]["embedding"]
     else:
         raise Exception(f"Failed to get embedding: {response.status_code}, {response.text}")
+
+openai_ef = OpenAIEmbeddingFunction(
+                api_key="YOUR_API_KEY",
+                model_name="text-embedding-nomic-embed-text-v1.5:2",
+                api_base="http://192.168.105.5:8001/v1"
+            )
+
+def vector_db_add(texts):
+    # 初始化向量数据库
+    persist_directory = './vector/chroma1'  # 持久化数据  存放处
+    client = chromadb.PersistentClient(persist_directory)
+    collection = client.get_or_create_collection(name="test2", embedding_function=openai_ef)
+    # 将文件添加到向量数据库中
+    collection.add(
+        documents=texts,
+        metadatas=[{
+            "source": "sample",
+            "id": str(uuid.uuid4()),  # 生成唯一的 ID
+            "timestamp": datetime.now().isoformat()  # 当前时间戳
+        } for _ in texts],
+        ids=[f"{uuid.uuid4()}{i}" for i in range(len(texts))]
+    )
+    logging.info('上传到向量数据库成功')
+
+
+
+def search_in_vector_db(query):
+    # 初始化向量数据库
+    persist_directory = './vector/chroma1'  # 持久化数据存放处
+
+    ector_db = chromadb
+    client = chromadb.PersistentClient(persist_directory)
+    collection = client.get_collection(name="test2",embedding_function=openai_ef)
+
+    # 将查询文本转换为嵌入向量
+    query_embedding = embedding(query)
+
+    # 在向量数据库中搜索
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=2,
+        # include=[IncludeEnum.documents, IncludeEnum.metadatas, IncludeEnum.distances]  # 使用 IncludeEnum 枚举
+    )
+    logging.info(f"搜索结果---------------{results}")
+
+    # # 返回搜索结果
+    # return {
+    #     "ids": result_ids,
+    #     "metadatas": result_metadatas,
+    #     "distances": result_distances
+    # }

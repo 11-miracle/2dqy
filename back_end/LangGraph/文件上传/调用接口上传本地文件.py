@@ -1,12 +1,13 @@
 import requests
 
 # 目标 URL
-url = 'http://192.168.105.5:8000/analyze'
+url = 'http://192.168.105.5:8000/uploads'
 
 # 要上传的文件路径
 # file_path = '/Users/2dqy004/Downloads/21.html'
 # file_path = '/Users/2dqy004/Downloads/test.docx'
-file_path = '/Users/2dqy004/Documents/20250310_1st_round_test.pdf'
+file_path = '/Users/2dqy004/Documents/ai1.txt'
+# file_path = '/Users/2dqy004/Documents/20250310_1st_round_test.pdf'
 # file_path = '/Users/2dqy004/Documents/work.png'
 # file_path = '/Users/2dqy004/Downloads/wx_camera_1741145616930.mp4'
 # file_path = '/Users/2dqy004/Downloads/基于大模型的RAG应用开发与优化——构建企业级LLM应用pdf.pdf'

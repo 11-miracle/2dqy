@@ -7,7 +7,8 @@ from docx import Document
 from openai import OpenAI
 from starlette.responses import StreamingResponse, JSONResponse
 
-from lanny_tools import Chatbot, process_file, chunk_text, analyze_with_gpt, embedding
+from lanny_tools import Chatbot, process_file, chunk_text, analyze_with_gpt, embedding, vector_db_add, \
+    search_in_vector_db
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
@@ -68,7 +69,7 @@ async def say_hello(query: str = None):
 
 
 # API 路由
-@app.post("/analyze")
+@app.post("/uploads")
 async def upload(
 
         file: UploadFile = File(...),  # 上传的文件
@@ -93,23 +94,14 @@ async def upload(
         text = process_file(filepath)
         chunks = chunk_text(text)
 
-        # # 分段处理
-        # responses = []
-        # for chunk in chunks:
-        #     response = analyze_with_gpt(chunk, query)
-        #     responses.append(response)
 
-        # 最终汇总
-        # final_response = analyze_with_gpt('\n'.join(responses), "请整合以下分析结果")
-
-        # return JSONResponse({
-        #     "status": "success",
-        #     "result": final_response
-        # })
 
         # 进行向量化
-        embedding_text = embedding(chunks)
-        #
+        # embedding_text = embedding(chunks)
+        vector_db_add(chunks)
+        return JSONResponse({
+            "status": "success",
+        })
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -118,3 +110,17 @@ async def upload(
         # 清理临时文件
         if os.path.exists(filepath):
             os.remove(filepath)
+
+@app.get("/search")
+async def search(query: str):
+    logging.info(query)
+
+    res = search_in_vector_db(query)
+    logging.info(res)
+    return JSONResponse({
+        "status": "success",
+        "data": res
+    })
+
+
+
