@@ -1,7 +1,7 @@
 import requests
 
 # 目标 URL
-url = 'http://192.168.105.5:8000/uploads'
+url = 'http://192.168.105.36:8000/uploads'
 
 # 要上传的文件路径
 # file_path = '/Users/2dqy004/Downloads/21.html'
