@@ -1,6 +1,7 @@
 
 LLM_BASE_URL = 'http://192.168.105.36:8001'
 HOST = 'localhost'
+PORT = 3306
 USER = 'root'
 PASSWORD = 'admin'
 DATABASE = 'chatbot'

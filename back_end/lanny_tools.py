@@ -12,7 +12,7 @@ from chromadb.utils.embedding_functions.openai_embedding_function import OpenAIE
 from docx import Document
 from openai import OpenAI
 
-from constant import LLM_BASE_URL, HOST, USER, PASSWORD, DATABASE
+from constant import LLM_BASE_URL, HOST, USER, PASSWORD, DATABASE, PORT
 
 
 class Chatbot:
@@ -29,8 +29,8 @@ class Chatbot:
         # ]
 
     def chatbot(self, messages, query):
-
-        messages = messages[-10:]
+        context = get_context()
+        messages.extend(context)
         # 进行rag
         res = search_in_vector_db(query)
 
@@ -89,10 +89,10 @@ class Chatbot:
                 "timestamp": datetime.utcnow().isoformat(),
                 "messages": messages,
             }
-            self.messages = messages
             logging.info(structured_output)
             # 在流式返回的最后，返回结构化输出
             # yield f"{structured_output}"
+            insert_context()
 
         return generate_response()
 
@@ -217,6 +217,7 @@ def search_in_vector_db(query):
 def create_db():
     connection = pymysql.connect(host=HOST,
                                  user=USER,
+                                 port=PORT,
                                  password=PASSWORD,
                                  database=DATABASE,
                                  charset='utf8mb4', )
@@ -226,18 +227,34 @@ def create_db():
 
 def insert_context(context):
     cursor = create_db()
-    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    cursor.execute(f"""
-    insert into context (user_id,context_id,context,create_time) values (1,1,'{context}','{now_time}')
-    """
-    )
+    try:
+        # 将字符串转换为字典
+        context_dict = json.loads(context)
+
+        # 插入数据
+        cursor.execute("""
+            INSERT INTO context (user_id, context_id, context) 
+            VALUES (%s, %s, %s)
+            """, (1, 1, f'{context_dict}')) # 使用 json.dumps 将字典转换为字符串存储
+        cursor.connection.commit()  # 提交事务
+        print("数据插入成功！")
+        return {'status': True}
+    except Exception as e:
+        print(f"发生错误：{e}")
+        return {'status': False, 'message': str(e)}
+    finally:
+        cursor.close()
 
 def get_context():
     cursor = create_db()
     cursor.execute(f"""
-    select * from context group by time DESC limit 10;
+    select * from context order by time DESC limit 10;
     """
     )
-    return cursor.fetchall()
+    history = cursor.fetchall()
+    context_history = []
+    for i in history:
+        context_history.append(i[3])
+    return context_history
 
 
