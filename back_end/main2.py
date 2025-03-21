@@ -7,8 +7,9 @@ from docx import Document
 from openai import OpenAI
 from starlette.responses import StreamingResponse, JSONResponse
 
+from back_end.constant import MESSAGES
 from lanny_tools import Chatbot, process_file, chunk_text, analyze_with_gpt, embedding, vector_db_add, \
-    search_in_vector_db
+    search_in_vector_db, get_context
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
@@ -27,13 +28,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-messages = [
-    # {"role": "system", "content": "你是专业的厨师，只能回答与做饭相关的问题。如果用户问到了其他问题，请拒绝回答。并返回'莫哈问，老子给你一耳屎"},
-    {"role": "system", "content": "以专业的天涯神贴的up主非常尖锐的语气回答问题，你是四川人，说的地道的四川话，每次回答最好要回答200字"},
-    # {"role": "system", "content": "你是一个优秀的ai聊天助手，擅长中英文对话。请用简洁、友好的方式回答问题。"},
-    # {"role": "system", "content": "如果用户提出不合理或不安全的问题，请拒绝回答。"},
-    # {"role": "system", "content": "如果用户需要帮助，请提供清晰的指导。"}
-]
+
 
 
 @app.get("/")
@@ -57,7 +52,8 @@ async def say_hello(query: str = None):
         return {"message": "Hello, World!"}
     logging.debug(f"Received name: {query}")
     chatbot = Chatbot()
-    res = chatbot.chatbot(messages, query)
+    get_context()
+    res = chatbot.chatbot(MESSAGES, query)
 
     # 创建一个异步生成器来处理流式响应
     return StreamingResponse(res, media_type="application/json")

@@ -231,3 +231,13 @@ def insert_context(context):
     insert into context (user_id,context_id,context,create_time) values (1,1,'{context}','{now_time}')
     """
     )
+
+def get_context():
+    cursor = create_db()
+    cursor.execute(f"""
+    select * from context group by time DESC limit 10;
+    """
+    )
+    return cursor.fetchall()
+
+
